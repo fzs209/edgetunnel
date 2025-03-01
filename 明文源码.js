@@ -762,7 +762,44 @@ function socks5AddressParser(address) {
 	}
 }
 
-
-
-
+/**
+ * 
+ * @param {string} userID 
+ * @param {string | null} hostName
+ * @returns {string}
+ */
+function getVLESSConfig(userID, hostName) {
+	const protocol = "vless";
+	const vlessMain = 
+	`${protocol}` + 
+	`://${userID}@${hostName}:443`+
+	`?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2048#${hostName}`;
+	
+	return `
+################################################################
+v2ray
+---------------------------------------------------------------
+${vlessMain}
+---------------------------------------------------------------
+################################################################
+clash-meta
+---------------------------------------------------------------
+- type: vless
+  name: ${hostName}
+  server: ${hostName}
+  port: 443
+  uuid: ${userID}
+  network: ws
+  tls: true
+  udp: false
+  sni: ${hostName}
+  client-fingerprint: chrome
+  ws-opts:
+    path: "/?ed=2048"
+    headers:
+      host: ${hostName}
+---------------------------------------------------------------
+################################################################
+`;
+}
 
