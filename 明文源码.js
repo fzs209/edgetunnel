@@ -375,7 +375,7 @@ async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portR
 			: connect({
 				hostname: address,
 				port: port,
-				addressFamily: 'v4'
+				addressFamily: 'v4',
 			});
 		remoteSocket.value = tcpSocket;
 		//log(`connected to ${address}:${port}`);
