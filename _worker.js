@@ -1410,6 +1410,43 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 		{ id: 'google-domain', hostname: 'www.google.com', port: 443 },
 		{ id: 'google-ip', hostname: '8.8.8.8', port: 443 }
 	];
+	const 请求TCP连接 = 创建请求TCP连接器(request);
+	const 测试原始连接 = async (接口, 目标, 创建Socket) => {
+		const 开始时间 = Date.now();
+		let socket = null, timeoutId = null;
+		try {
+			socket = 创建Socket();
+			const openedInfo = await Promise.race([
+				socket.opened,
+				new Promise((_, reject) => {
+					timeoutId = setTimeout(() => reject(new Error('TCP open timeout after 5000ms')), 5000);
+				})
+			]);
+			return {
+				api: 接口,
+				target: 目标.hostname + ':' + 目标.port,
+				success: true,
+				elapsedMs: Date.now() - 开始时间,
+				remoteAddress: openedInfo?.remoteAddress ?? null,
+				localAddress: openedInfo?.localAddress ?? null
+			};
+		} catch (error) {
+			return {
+				api: 接口,
+				target: 目标.hostname + ':' + 目标.port,
+				success: false,
+				elapsedMs: Date.now() - 开始时间,
+				errorName: error?.name || null,
+				error: error?.message || String(error)
+			};
+		} finally {
+			if (timeoutId !== null) clearTimeout(timeoutId);
+			try {
+				const closePromise = socket?.close?.();
+				closePromise?.catch?.(() => {});
+			} catch (e) { }
+		}
+	};
 	let 正在测试 = false;
 	const 发送结果 = 数据 => {
 		try {
@@ -1437,6 +1474,10 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 			for (const 目标 of 诊断目标列表) {
 				发送结果({ type: 'progress', target: 目标 });
 				const 开始时间 = Date.now();
+				const apiComparisons = await Promise.all([
+					测试原始连接('cloudflare:sockets.connect', 目标, () => cloudflareSocketConnect({ hostname: 目标.hostname, port: 目标.port })),
+					测试原始连接('request.fetcher.connect', 目标, () => 请求TCP连接({ hostname: 目标.hostname, port: 目标.port }))
+				]);
 				const 诊断记录 = { phase: 'direct', selectedPath: null, events: [] };
 				const remoteConnWrapper = {
 					socket: null,
@@ -1465,6 +1506,7 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 					测试结果.push({
 						id: 目标.id,
 						target: 目标.hostname + ':' + 目标.port,
+						apiComparisons,
 						success: !!socket,
 						selectedPath: 诊断记录.selectedPath,
 						proxyCandidate: 诊断记录.proxyCandidate || null,
@@ -1475,6 +1517,7 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 					测试结果.push({
 						id: 目标.id,
 						target: 目标.hostname + ':' + 目标.port,
+						apiComparisons,
 						success: false,
 						selectedPath: 诊断记录.selectedPath,
 						proxyCandidate: 诊断记录.proxyCandidate || null,
@@ -1493,7 +1536,7 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 			发送结果({
 				type: 'complete',
 				diagnostic: 'websocket-forwardataTCP',
-				note: 'Uses the actual inbound WebSocket Upgrade Request and forwardataTCP(). Each target receives a one-byte 0x00 write probe after TCP open; no TLS handshake or application response is tested.',
+				note: 'Compares both socket APIs using the actual inbound WebSocket Upgrade Request, then runs forwardataTCP() (direct first, ProxyIP fallback when configured). Raw API checks only await socket.opened; forwardataTCP writes one byte 0x00. No TLS handshake or application response is tested.',
 				timestamp: new Date().toISOString(),
 				requestContext: {
 					method: request.method,
