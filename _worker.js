@@ -1414,6 +1414,7 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 	const 测试原始连接 = async (接口, 目标, 创建Socket) => {
 		const 开始时间 = Date.now();
 		let socket = null, timeoutId = null;
+		发送结果({ type: 'stage', stage: 'api-start', api: 接口, target: 目标.hostname + ':' + 目标.port });
 		try {
 			socket = 创建Socket();
 			const openedInfo = await Promise.race([
@@ -1422,7 +1423,7 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 					timeoutId = setTimeout(() => reject(new Error('TCP open timeout after 5000ms')), 5000);
 				})
 			]);
-			return {
+			const result = {
 				api: 接口,
 				target: 目标.hostname + ':' + 目标.port,
 				success: true,
@@ -1430,8 +1431,10 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 				remoteAddress: openedInfo?.remoteAddress ?? null,
 				localAddress: openedInfo?.localAddress ?? null
 			};
+			发送结果({ type: 'stage', stage: 'api-result', result });
+			return result;
 		} catch (error) {
-			return {
+			const result = {
 				api: 接口,
 				target: 目标.hostname + ':' + 目标.port,
 				success: false,
@@ -1439,6 +1442,8 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 				errorName: error?.name || null,
 				error: error?.message || String(error)
 			};
+			发送结果({ type: 'stage', stage: 'api-result', result });
+			return result;
 		} finally {
 			if (timeoutId !== null) clearTimeout(timeoutId);
 			try {
@@ -1478,6 +1483,7 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 					测试原始连接('cloudflare:sockets.connect', 目标, () => cloudflareSocketConnect({ hostname: 目标.hostname, port: 目标.port })),
 					测试原始连接('request.fetcher.connect', 目标, () => 请求TCP连接({ hostname: 目标.hostname, port: 目标.port }))
 				]);
+				发送结果({ type: 'stage', stage: 'api-comparison-complete', target: 目标, apiComparisons });
 				const 诊断记录 = { phase: 'direct', selectedPath: null, events: [] };
 				const remoteConnWrapper = {
 					socket: null,
@@ -1487,13 +1493,16 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 					tcpDiagnostic: 诊断记录
 				};
 				let socket = null;
+				// 使用独立的占位对象，避免 forwardataTCP 的失败处理关闭诊断控制 WebSocket。
+				const 转发占位WS = { readyState: WebSocket.OPEN, close() { } };
+				发送结果({ type: 'stage', stage: 'forwardataTCP-start', target: 目标 });
 				try {
 					// 发送单字节探针，仅验证 Socket writable；不是 TLS ClientHello 或 HTTP 请求。
 					socket = await forwardataTCP(
 						目标.hostname,
 						目标.port,
 						new Uint8Array([0]),
-						serverSock,
+						转发占位WS,
 						null,
 						remoteConnWrapper,
 						userID,
@@ -1513,6 +1522,14 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 						elapsedMs: Date.now() - 开始时间,
 						events: 诊断记录.events
 					});
+					发送结果({
+						type: 'stage',
+						stage: 'forwardataTCP-success',
+						target: 目标,
+						selectedPath: 诊断记录.selectedPath,
+						proxyCandidate: 诊断记录.proxyCandidate || null,
+						events: 诊断记录.events
+					});
 				} catch (error) {
 					测试结果.push({
 						id: 目标.id,
@@ -1524,6 +1541,16 @@ async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下
 						elapsedMs: Date.now() - 开始时间,
 						errorName: error?.name || null,
 						error: error?.message || String(error),
+						events: 诊断记录.events
+					});
+					发送结果({
+						type: 'stage',
+						stage: 'forwardataTCP-error',
+						target: 目标,
+						errorName: error?.name || null,
+						error: error?.message || String(error),
+						selectedPath: 诊断记录.selectedPath,
+						proxyCandidate: 诊断记录.proxyCandidate || null,
 						events: 诊断记录.events
 					});
 				} finally {
