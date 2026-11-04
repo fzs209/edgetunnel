@@ -67,6 +67,15 @@ export default {
 				}
 				if (请求前8总和 === 目标前8总和 && 请求UUID.slice(-12) === 目标UUID.slice(-12)) return new Response(JSON.stringify({ Version: EDT_版本号 }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 			}
+		} else if (管理员密码 && upgradeHeader === 'websocket' && url.pathname.toLowerCase() === '/admin/tcp-connect-diagnostic-ws') {// 仅管理员会话可用的真实 WebSocket TCP 诊断
+			const cookies = request.headers.get('Cookie') || '';
+			const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
+			if (!authCookie || authCookie !== await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
+				return new Response('Unauthorized', { status: 401 });
+			}
+			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底);
+			log('[TCP诊断WS] 管理员已认证，使用真实 WebSocket Upgrade Request 执行 forwardataTCP。');
+			return await 处理TCPWebSocket诊断请求(request, userID, url, 反代上下文);
 		} else if (管理员密码 && upgradeHeader === 'websocket') {// WebSocket代理
 			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底);
 			log(`[WebSocket] 命中请求: ${url.pathname}${url.search}`);
@@ -1389,6 +1398,128 @@ function 解码WS早期数据(header, token) {
 	return 是有效WS早期数据(bytes, token) ? bytes : null;
 }
 
+
+async function 处理TCPWebSocket诊断请求(request, userID, url, 反代上下文 = {}) {
+	const WS套接字对 = new WebSocketPair();
+	const [clientSock, serverSock] = Object.values(WS套接字对);
+	try { serverSock.accept({ allowHalfOpen: true }) }
+	catch (_) { serverSock.accept() }
+
+	const 诊断目标列表 = [
+		{ id: 'cloudflare-ip', hostname: '172.68.87.12', port: 443 },
+		{ id: 'google-domain', hostname: 'www.google.com', port: 443 },
+		{ id: 'google-ip', hostname: '8.8.8.8', port: 443 }
+	];
+	let 正在测试 = false;
+	const 发送结果 = 数据 => {
+		try {
+			if (serverSock.readyState === WebSocket.OPEN) serverSock.send(JSON.stringify(数据));
+		} catch (e) { }
+	};
+
+	serverSock.addEventListener('message', async event => {
+		let 命令 = null;
+		try {
+			if (typeof event.data === 'string') 命令 = JSON.parse(event.data);
+		} catch (e) { }
+		if (命令?.action !== 'run') {
+			发送结果({ type: 'error', error: 'Send {"action":"run"} to start the diagnostic.' });
+			return;
+		}
+		if (正在测试) {
+			发送结果({ type: 'error', error: 'A diagnostic run is already in progress.' });
+			return;
+		}
+
+		正在测试 = true;
+		const 测试结果 = [];
+		try {
+			for (const 目标 of 诊断目标列表) {
+				发送结果({ type: 'progress', target: 目标 });
+				const 开始时间 = Date.now();
+				const 诊断记录 = { phase: 'direct', selectedPath: null, events: [] };
+				const remoteConnWrapper = {
+					socket: null,
+					connectingPromise: null,
+					retryConnect: null,
+					downlinkDrain: Promise.resolve(),
+					tcpDiagnostic: 诊断记录
+				};
+				let socket = null;
+				try {
+					// 发送单字节探针，仅验证 Socket writable；不是 TLS ClientHello 或 HTTP 请求。
+					socket = await forwardataTCP(
+						目标.hostname,
+						目标.port,
+						new Uint8Array([0]),
+						serverSock,
+						null,
+						remoteConnWrapper,
+						userID,
+						request,
+						反代上下文,
+						false,
+						null,
+						true
+					);
+					测试结果.push({
+						id: 目标.id,
+						target: 目标.hostname + ':' + 目标.port,
+						success: !!socket,
+						selectedPath: 诊断记录.selectedPath,
+						proxyCandidate: 诊断记录.proxyCandidate || null,
+						elapsedMs: Date.now() - 开始时间,
+						events: 诊断记录.events
+					});
+				} catch (error) {
+					测试结果.push({
+						id: 目标.id,
+						target: 目标.hostname + ':' + 目标.port,
+						success: false,
+						selectedPath: 诊断记录.selectedPath,
+						proxyCandidate: 诊断记录.proxyCandidate || null,
+						elapsedMs: Date.now() - 开始时间,
+						errorName: error?.name || null,
+						error: error?.message || String(error),
+						events: 诊断记录.events
+					});
+				} finally {
+					try { socket?.close?.() } catch (e) { }
+					try { remoteConnWrapper.socket?.close?.() } catch (e) { }
+					remoteConnWrapper.socket = null;
+				}
+			}
+
+			发送结果({
+				type: 'complete',
+				diagnostic: 'websocket-forwardataTCP',
+				note: 'Uses the actual inbound WebSocket Upgrade Request and forwardataTCP(). Each target receives a one-byte 0x00 write probe after TCP open; no TLS handshake or application response is tested.',
+				timestamp: new Date().toISOString(),
+				requestContext: {
+					method: request.method,
+					upgrade: request.headers.get('Upgrade'),
+					colo: request.cf?.colo ?? null,
+					hostname: url.hostname,
+					path: url.pathname
+				},
+				proxyContext: {
+					proxyIP: 反代上下文.反代IP || null,
+					proxyType: 反代上下文.代理类型 || 'proxyip',
+					fallbackEnabled: !!反代上下文.反代兜底
+				},
+				probe: { bytesHex: '00', bytes: 1 },
+				results: 测试结果
+			});
+		} catch (error) {
+			发送结果({ type: 'error', error: error?.message || String(error), results: 测试结果 });
+		} finally {
+			正在测试 = false;
+		}
+	});
+
+	return new Response(null, { status: 101, webSocket: clientSock });
+}
+
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
 async function 处理WS请求(request, yourUUID, url, 反代上下文 = {}) {
 	const WS套接字对 = new WebSocketPair();
@@ -2317,28 +2448,82 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 	};
 
 	async function 等待连接建立(remoteSock, timeoutMs = 连接超时毫秒) {
-		await Promise.race([
+		return await Promise.race([
 			remoteSock.opened,
 			new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时')), timeoutMs))
 		]);
 	}
 
 	async function 打开TCP连接(address, port) {
-		const remoteSock = TCP连接({ hostname: address, port });
+		const 开始时间 = Date.now();
+		let remoteSock = null;
 		try {
-			await 等待连接建立(remoteSock);
+			remoteSock = TCP连接({ hostname: address, port });
+			const openedInfo = await 等待连接建立(remoteSock);
+			const 诊断 = remoteConnWrapper.tcpDiagnostic;
+			if (诊断) 诊断.events.push({
+				stage: 'socket.opened',
+				phase: 诊断.phase || 'unknown',
+				target: address + ':' + port,
+				elapsedMs: Date.now() - 开始时间,
+				remoteAddress: openedInfo?.remoteAddress ?? null,
+				localAddress: openedInfo?.localAddress ?? null
+			});
 			return remoteSock;
 		} catch (err) {
+			const 诊断 = remoteConnWrapper.tcpDiagnostic;
+			if (诊断) 诊断.events.push({
+				stage: 'socket.open-error',
+				phase: 诊断.phase || 'unknown',
+				target: address + ':' + port,
+				elapsedMs: Date.now() - 开始时间,
+				errorName: err?.name || null,
+				error: err?.message || String(err)
+			});
 			try { remoteSock?.close?.() } catch (e) { }
 			throw err;
 		}
 	}
 
 	async function 写入首包(remoteSock, data) {
-		if (有效数据长度(data) <= 0) return;
+		const 字节数 = 有效数据长度(data);
+		const 诊断 = remoteConnWrapper.tcpDiagnostic;
+		if (字节数 <= 0) {
+			if (诊断) 诊断.events.push({
+				stage: 'first-packet-write',
+				phase: 诊断.phase || 'unknown',
+				attempted: false,
+				bytes: 0
+			});
+			return;
+		}
+		const 开始时间 = Date.now();
 		const writer = remoteSock.writable.getWriter();
-		try { await writer.write(数据转Uint8Array(data)) }
-		finally { try { writer.releaseLock() } catch (e) { } }
+		try {
+			await writer.write(数据转Uint8Array(data));
+			if (诊断) 诊断.events.push({
+				stage: 'first-packet-write',
+				phase: 诊断.phase || 'unknown',
+				attempted: true,
+				success: true,
+				bytes: 字节数,
+				elapsedMs: Date.now() - 开始时间
+			});
+		} catch (err) {
+			if (诊断) 诊断.events.push({
+				stage: 'first-packet-write',
+				phase: 诊断.phase || 'unknown',
+				attempted: true,
+				success: false,
+				bytes: 字节数,
+				elapsedMs: Date.now() - 开始时间,
+				errorName: err?.name || null,
+				error: err?.message || String(err)
+			});
+			throw err;
+		} finally {
+			try { writer.releaseLock() } catch (e) { }
+		}
 	}
 
 	async function 并发打开候选连接(候选列表) {
@@ -2405,6 +2590,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 		try {
 			const 连接结果 = await 并发打开候选连接(候选列表);
 			socket = 连接结果.socket;
+			if (remoteConnWrapper.tcpDiagnostic) remoteConnWrapper.tcpDiagnostic.selectedPath = remoteConnWrapper.tcpDiagnostic.phase === 'direct-fallback' ? 'direct-fallback' : 'direct';
 			if (预加载候选列表) {
 				const winner = 连接结果.candidate;
 				log(`[TCP直连] 预加载竞速结果: ${winner.hostname}:${winner.port} 胜出，源域名: ${winner.resolvedFrom || address}`);
@@ -2431,8 +2617,13 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 				let socket = null, candidate = null;
 				try {
 					log(`[反代连接] 并发尝试 ${候选列表.length} 路: ${候选列表.map(候选 => `${候选.hostname}:${候选.port}`).join(', ')}`);
+					if (remoteConnWrapper.tcpDiagnostic) remoteConnWrapper.tcpDiagnostic.phase = 'proxyip';
 					const 连接结果 = await 并发打开候选连接(候选列表);
 					socket = 连接结果.socket;
+					if (remoteConnWrapper.tcpDiagnostic) {
+						remoteConnWrapper.tcpDiagnostic.selectedPath = 'proxyip';
+						remoteConnWrapper.tcpDiagnostic.proxyCandidate = { hostname: 连接结果.candidate.hostname, port: 连接结果.candidate.port, index: 连接结果.candidate.index };
+					}
 					candidate = 连接结果.candidate;
 					await 写入首包(socket, data);
 					log(`[反代连接] 成功连接到: ${candidate.hostname}:${candidate.port} (索引: ${candidate.index})`);
@@ -2445,7 +2636,10 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 			}
 		}
 
-		if (启用反代失败兜底) return connectDirect(address, port, data, false);
+		if (启用反代失败兜底) {
+			if (remoteConnWrapper.tcpDiagnostic) remoteConnWrapper.tcpDiagnostic.phase = 'direct-fallback';
+			return connectDirect(address, port, data, false);
+		}
 		else {
 			throw new Error('[反代连接] 所有反代连接失败，且未启用反代兜底，连接终止。');
 		}
