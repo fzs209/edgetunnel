@@ -5630,35 +5630,35 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		HOSTS: [hostname],
 		UUID: userID,
 		PATH: "/",
-		ALPN: "",
+		ALPN: "h3",
 		协议类型: "v" + "le" + "ss",
-		传输协议: "ws",
+		传输协议: "xhttp",
 		gRPC模式: "gun",
 		gRPCUserAgent: UA,
 		XHTTP: {
 			xmux: {
 				maxConcurrency: "",
-				maxConnections: "",
+				maxConnections: "1",
 			},
 		},
 		跳过证书验证: false,
 		启用0RTT: false,
 		TLS分片: null,
 		随机路径: false,
-		ECH: false,
+		ECH: true,
 		ECHConfig: {
-			DNS: Ali_DoH,
-			SNI: ECH_SNI,
+			DNS: "https://223.6.6.6/dns-query",
+			SNI: "research.cloudflare.com",
 		},
 		SS: {
 			加密方式: "aes-128-gcm",
 			TLS: true,
 		},
-		Fingerprint: "chrome",
+		Fingerprint: "firefox",
 		优选订阅生成: {
 			local: true, // true: 基于本地的优选地址  false: 优选订阅生成器
 			本地IP库: {
-				随机IP: true, // 当 随机IP 为true时生效，启用随机IP的数量，否则使用KV内的ADD.txt
+				随机IP: false, // 当 随机IP 为true时生效，启用随机IP的数量，否则使用KV内的ADD.txt
 				随机数量: 16,
 				指定端口: -1,
 			},
@@ -5677,7 +5677,7 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 			TLS13: false, // 启用 TLS 1.3
 			APPEND_TYPE: false, // 插入节点类型
 			SORT: false, // 基础节点排序
-			EXPAND: true, // 展开规则全文
+			EXPAND: false, // 展开规则全文
 		},
 		反代: {
 			[_p]: "auto",
