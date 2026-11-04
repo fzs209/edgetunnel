@@ -6318,6 +6318,15 @@ function 是否为动态ProxyIP路径(请求路径, 基础路径) {
 	return 请求路径.startsWith(基础前缀 + '/') && new RegExp('^/(?:proxyip[.=]|pyip=|ip=)[^/]+$', 'i').test(剩余路径);
 }
 
+// Xray XHTTP stream-one 默认把 UUID 会话 ID 放在 PATH 后面。
+// 仅允许一个标准 UUID 段，避免把任意子路径也当作合法 XHTTP 入口。
+function 是否为XHTTP会话路径(请求路径, 基础路径) {
+	const 基础前缀 = 基础路径 === '/' ? '/' : 基础路径.replace(new RegExp('/+$'), '') + '/';
+	if (!请求路径.startsWith(基础前缀)) return false;
+	const 会话ID = 请求路径.slice(基础前缀.length);
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(会话ID);
+}
+
 function 校验代理PATH白名单(url, PATH配置, 传输类型, 反代上下文 = {}) {
 	const 请求路径 = 规范化代理PATH路径(url.pathname);
 	const 允许路径 = PATH配置?.路径;
@@ -6350,7 +6359,9 @@ function 校验代理PATH白名单(url, PATH配置, 传输类型, 反代上下�
 		}
 	} else {
 		for (const 候选 of 候选路径) {
-			if (候选 === 允许路径 || 是否为动态ProxyIP路径(候选, 允许路径)) return true;
+			if (候选 === 允许路径 ||
+				是否为动态ProxyIP路径(候选, 允许路径) ||
+				(传输类型 === 'http' && 是否为XHTTP会话路径(候选, 允许路径))) return true;
 			if (反代上下文.反代IP === '链式代理' && new RegExp('^/video/[^/]+$', 'i').test(候选)) return true;
 		}
 	}
