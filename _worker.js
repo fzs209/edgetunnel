@@ -4815,12 +4815,16 @@ function 获取传输协议配置(配置 = {}) {
 		const maxConcurrency = 解析XMUX限制(配置.XHTTP?.xmux?.maxConcurrency);
 		const maxConnections = 解析XMUX限制(配置.XHTTP?.xmux?.maxConnections);
 
-		// 两者互斥；仅在用户配置其中一项时显式生成 XMUX。
-		if ((maxConcurrency !== null) !== (maxConnections !== null)) {
-			叉混淆JSON.xmux = {
-				maxConcurrency: maxConcurrency === null ? 0 : maxConcurrency,
-				maxConnections: maxConnections === null ? 0 : maxConnections
-			};
+		if (maxConcurrency !== null || maxConnections !== null) {
+			叉混淆JSON.xmux = {};
+
+			if (maxConcurrency !== null) {
+				叉混淆JSON.xmux.maxConcurrency = maxConcurrency;
+			}
+
+			if (maxConnections !== null) {
+				叉混淆JSON.xmux.maxConnections = maxConnections;
+			}
 		}
 	}
 
@@ -6678,5 +6682,3 @@ async function html1101(host, 访问IP) {
 </body>
 </html>`;
 }
-
-/* Removed inactive embedded text payload. */
