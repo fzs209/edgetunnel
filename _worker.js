@@ -1,3 +1,4 @@
+import { connect as cloudflareSocketConnect } from 'cloudflare:sockets';
 const Version = '2026-10-08 22:23:27';
 let config_JSON, 缓存SOCKS5白名单 = null, 调试日志打印 = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
@@ -109,6 +110,93 @@ export default {
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
 					// 没有cookie或cookie错误，跳转到/login页面
 					if (!authCookie || authCookie !== await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
+					// 临时 TCP 诊断入口：仅管理员登录后可用，诊断结束后可删除。
+					if (区分大小写访问路径 === 'admin/tcp-connect-diagnostic') {
+						if (request.method !== 'GET') {
+							return new Response('GET only', { status: 405, headers: { 'Allow': 'GET' } });
+						}
+
+						const 测试连接 = async (接口, 目标, 创建Socket) => {
+							const 开始时间 = Date.now();
+							let socket = null, timeoutId = null;
+							try {
+								socket = 创建Socket();
+								const openedInfo = await Promise.race([
+									socket.opened,
+									new Promise((_, reject) => {
+										timeoutId = setTimeout(() => reject(new Error('TCP open timeout after 8000ms')), 8000);
+									})
+								]);
+								return {
+									api: 接口,
+									target: 目标,
+									success: true,
+									elapsedMs: Date.now() - 开始时间,
+									remoteAddress: openedInfo?.remoteAddress ?? null,
+									localAddress: openedInfo?.localAddress ?? null
+								};
+							} catch (error) {
+								return {
+									api: 接口,
+									target: 目标,
+									success: false,
+									elapsedMs: Date.now() - 开始时间,
+									errorName: error?.name || null,
+									error: error?.message || String(error)
+								};
+							} finally {
+								if (timeoutId !== null) clearTimeout(timeoutId);
+								try {
+									if (socket) await socket.close();
+								} catch (e) { }
+							}
+						};
+
+						const Cloudflare目标 = { hostname: '172.68.87.12', port: 443 };
+						const 普通公网目标 = { hostname: 'www.google.com', port: 443 };
+						const 测试结果 = [];
+
+						测试结果.push(await 测试连接(
+							'cloudflare:sockets.connect',
+							Cloudflare目标,
+							() => cloudflareSocketConnect(Cloudflare目标)
+						));
+						测试结果.push(await 测试连接(
+							'request.fetcher.connect',
+							Cloudflare目标,
+							() => 创建请求TCP连接器(request)(Cloudflare目标)
+						));
+						测试结果.push(await 测试连接(
+							'cloudflare:sockets.connect',
+							普通公网目标,
+							() => cloudflareSocketConnect(普通公网目标)
+						));
+						测试结果.push(await 测试连接(
+							'request.fetcher.connect',
+							普通公网目标,
+							() => 创建请求TCP连接器(request)(普通公网目标)
+						));
+
+						return new Response(JSON.stringify({
+							diagnostic: 'tcp-connect-comparison',
+							note: 'TCP connect/opened only; no TLS handshake or application data was sent.',
+							timestamp: new Date().toISOString(),
+							runtime: {
+								colo: request.cf?.colo ?? null,
+								hostname: url.hostname,
+								path: url.pathname
+							},
+							timeoutMs: 8000,
+							results: 测试结果
+						}, null, 2), {
+							status: 200,
+							headers: {
+								'Content-Type': 'application/json;charset=utf-8',
+								'Cache-Control': 'no-store'
+							}
+						});
+					}
+
 					if (访问路径 === 'admin/log.json') {// 读取日志内容
 						const 读取日志内容 = await env.KV.get('log.json') || '[]';
 						return new Response(读取日志内容, { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
