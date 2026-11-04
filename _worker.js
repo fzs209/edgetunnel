@@ -1,4 +1,4 @@
-﻿const Version = '2026-10-08 22:23:27';
+const Version = '2026-10-08 22:23:27';
 let config_JSON, 缓存SOCKS5白名单 = null, 调试日志打印 = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const Pages静态页面 = 'https://fzs209.github.io/EDT-Pages.github.io', EDT_版本号 = Number(String(Version).replace(/\D+/g, ''));
@@ -4819,12 +4819,7 @@ function 获取传输协议配置(配置 = {}) {
 		if ((maxConcurrency !== null) !== (maxConnections !== null)) {
 			叉混淆JSON.xmux = {
 				maxConcurrency: maxConcurrency === null ? 0 : maxConcurrency,
-				maxConnections: maxConnections === null ? 0 : maxConnections,
-				// 显式设置其他 XMUX 字段，以保留 Xray 默认的随机轮换行为。
-				cMaxReuseTimes: 0,
-				hMaxRequestTimes: "600-900",
-				hMaxReusableSecs: "1800-3000",
-				hKeepAlivePeriod: 0
+				maxConnections: maxConnections === null ? 0 : maxConnections
 			};
 		}
 	}
