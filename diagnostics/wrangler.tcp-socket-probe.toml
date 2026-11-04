@@ -1,9 +1,0 @@
-name = "edgetunnel-tcp-socket-probe"
-main = "tcp-socket-probe.js"
-compatibility_date = "2026-11-05"
-workers_dev = true
-
-# Optional: configure a TCP service on a VPS you control.
-# [vars]
-# TCP_PROBE_HOST = "your-vps-ip-or-domain"
-# TCP_PROBE_PORT = "443"
