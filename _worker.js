@@ -124,7 +124,7 @@ export default {
 								const openedInfo = await Promise.race([
 									socket.opened,
 									new Promise((_, reject) => {
-										timeoutId = setTimeout(() => reject(new Error('TCP open timeout after 8000ms')), 8000);
+										timeoutId = setTimeout(() => reject(new Error('TCP open timeout after 5000ms')), 5000);
 									})
 								]);
 								return {
@@ -147,7 +147,10 @@ export default {
 							} finally {
 								if (timeoutId !== null) clearTimeout(timeoutId);
 								try {
-									if (socket) await socket.close();
+									if (socket) {
+										const closePromise = socket.close();
+										closePromise?.catch?.(() => {});
+									}
 								} catch (e) { }
 							}
 						};
@@ -186,7 +189,7 @@ export default {
 								hostname: url.hostname,
 								path: url.pathname
 							},
-							timeoutMs: 8000,
+							timeoutMs: 5000,
 							results: 测试结果
 						}, null, 2), {
 							status: 200,
