@@ -67,27 +67,13 @@ export default {
 				if (请求前8总和 === 目标前8总和 && 请求UUID.slice(-12) === 目标UUID.slice(-12)) return new Response(JSON.stringify({ Version: EDT_版本号 }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 			}
 		} else if (管理员密码 && upgradeHeader === 'websocket') {// WebSocket代理
-			const PATH白名单配置 = await 读取代理PATH白名单配置(env);
 			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底);
-			if (!校验代理PATH白名单(url, PATH白名单配置, 'ws', 反代上下文)) {
-				log(`[PATH] 拒绝WebSocket请求: ${url.pathname}`);
-				return new Response('Not Found', { status: 404 });
-			}
 			log(`[WebSocket] 命中请求: ${url.pathname}${url.search}`);
 			return await 处理WS请求(request, userID, url, 反代上下文);
 		} else if (管理员密码 && !访问路径.startsWith('admin/') && 访问路径 !== 'login' && request.method === 'POST') {// gRPC/叉HTTP代理
+			const 反代上下文 = await 反代参数获取(url, userID, 默认反代IP, 默认反代兜底);
 			const 命中叉HTTP特征 = !!request.headers.get(本机标识头) || !!url.searchParams.get(本机标识键);
-			const 是gRPC请求 = !命中叉HTTP特征 && contentType.startsWith('application/grpc');
-			// gRPC 的 method 路径可能附加 /Tun 或 /TunMulti；解析反代参数前先剥离该后缀。
-			const 反代解析URL = 是gRPC请求 && new RegExp('/(?:Tun|TunMulti)$', 'i').test(url.pathname) ? new URL(url.href) : url;
-			if (反代解析URL !== url) 反代解析URL.pathname = 反代解析URL.pathname.replace(new RegExp('/(?:Tun|TunMulti)$', 'i'), '');
-			const 反代上下文 = await 反代参数获取(反代解析URL, userID, 默认反代IP, 默认反代兜底);
-			const PATH白名单配置 = await 读取代理PATH白名单配置(env);
-			if (!校验代理PATH白名单(url, PATH白名单配置, 是gRPC请求 ? 'grpc' : 'http', 反代上下文)) {
-				log(`[PATH] 拒绝${是gRPC请求 ? 'gRPC' : 'XHTTP'}请求: ${url.pathname}`);
-				return new Response('Not Found', { status: 404 });
-			}
-			if (是gRPC请求) {
+			if (!命中叉HTTP特征 && contentType.startsWith('application/grpc')) {
 				log(`[gRPC] 命中请求: ${url.pathname}${url.search}`);
 				return await 处理gRPC请求(request, userID, 反代上下文);
 			}
@@ -5455,12 +5441,10 @@ async function MD5MD5(文本) {
 	return 第二次十六进制.toLowerCase();
 }
 
-const 随机路径目录 = ["about", "account", "acg", "act", "activity", "ad", "ads", "ajax", "album", "albums", "anime", "api", "app", "apps", "archive", "archives", "article", "articles", "ask", "auth", "avatar", "bbs", "bd", "blog", "blogs", "book", "books", "bt", "buy", "cart", "category", "categories", "cb", "channel", "channels", "chat", "china", "city", "class", "classify", "clip", "clips", "club", "cn", "code", "collect", "collection", "comic", "comics", "community", "company", "config", "contact", "content", "course", "courses", "cp", "data", "detail", "details", "dh", "directory", "discount", "discuss", "dl", "dload", "doc", "docs", "document", "documents", "doujin", "download", "downloads", "drama", "edu", "en", "ep", "episode", "episodes", "event", "events", "f", "faq", "favorite", "favourites", "favs", "feedback", "file", "files", "film", "films", "forum", "forums", "friend", "friends", "game", "games", "gif", "go", "go.html", "go.php", "group", "groups", "help", "home", "hot", "htm", "html", "image", "images", "img", "index", "info", "intro", "item", "items", "ja", "jp", "jump", "jump.html", "jump.php", "jumping", "knowledge", "lang", "lesson", "lessons", "lib", "library", "link", "links", "list", "live", "lives", "m", "mag", "magnet", "mall", "manhua", "map", "member", "members", "message", "messages", "mobile", "movie", "movies", "music", "my", "new", "news", "note", "novel", "novels", "online", "order", "out", "out.html", "out.php", "outbound", "p", "page", "pages", "pay", "payment", "pdf", "photo", "photos", "pic", "pics", "picture", "pictures", "play", "player", "playlist", "post", "posts", "product", "products", "program", "programs", "project", "qa", "question", "rank", "ranking", "read", "readme", "redirect", "redirect.html", "redirect.php", "reg", "register", "res", "resource", "retrieve", "sale", "search", "season", "seasons", "section", "seller", "series", "service", "services", "setting", "settings", "share", "shop", "show", "shows", "site", "soft", "sort", "source", "special", "star", "stars", "static", "stock", "store", "stream", "streaming", "streams", "student", "study", "tag", "tags", "task", "teacher", "team", "tech", "temp", "test", "thread", "tool", "tools", "topic", "topics", "torrent", "trade", "travel", "tv", "txt", "type", "u", "upload", "uploads", "url", "urls", "user", "users", "v", "version", "videos", "view", "vip", "vod", "watch", "web", "wenku", "wiki", "work", "www", "zh", "zh-cn", "zh-tw", "zip"];
-const 随机路径目录集合 = new Set(随机路径目录);
 function 随机路径(完整节点路径 = "/") {
-	const 常用路径目录 = 随机路径目录;
+	const 常用路径目录 = ["about", "account", "acg", "act", "activity", "ad", "ads", "ajax", "album", "albums", "anime", "api", "app", "apps", "archive", "archives", "article", "articles", "ask", "auth", "avatar", "bbs", "bd", "blog", "blogs", "book", "books", "bt", "buy", "cart", "category", "categories", "cb", "channel", "channels", "chat", "china", "city", "class", "classify", "clip", "clips", "club", "cn", "code", "collect", "collection", "comic", "comics", "community", "company", "config", "contact", "content", "course", "courses", "cp", "data", "detail", "details", "dh", "directory", "discount", "discuss", "dl", "dload", "doc", "docs", "document", "documents", "doujin", "download", "downloads", "drama", "edu", "en", "ep", "episode", "episodes", "event", "events", "f", "faq", "favorite", "favourites", "favs", "feedback", "file", "files", "film", "films", "forum", "forums", "friend", "friends", "game", "games", "gif", "go", "go.html", "go.php", "group", "groups", "help", "home", "hot", "htm", "html", "image", "images", "img", "index", "info", "intro", "item", "items", "ja", "jp", "jump", "jump.html", "jump.php", "jumping", "knowledge", "lang", "lesson", "lessons", "lib", "library", "link", "links", "list", "live", "lives", "m", "mag", "magnet", "mall", "manhua", "map", "member", "members", "message", "messages", "mobile", "movie", "movies", "music", "my", "new", "news", "note", "novel", "novels", "online", "order", "out", "out.html", "out.php", "outbound", "p", "page", "pages", "pay", "payment", "pdf", "photo", "photos", "pic", "pics", "picture", "pictures", "play", "player", "playlist", "post", "posts", "product", "products", "program", "programs", "project", "qa", "question", "rank", "ranking", "read", "readme", "redirect", "redirect.html", "redirect.php", "reg", "register", "res", "resource", "retrieve", "sale", "search", "season", "seasons", "section", "seller", "series", "service", "services", "setting", "settings", "share", "shop", "show", "shows", "site", "soft", "sort", "source", "special", "star", "stars", "static", "stock", "store", "stream", "streaming", "streams", "student", "study", "tag", "tags", "task", "teacher", "team", "tech", "temp", "test", "thread", "tool", "tools", "topic", "topics", "torrent", "trade", "travel", "tv", "txt", "type", "u", "upload", "uploads", "url", "urls", "user", "users", "v", "version", "videos", "view", "vip", "vod", "watch", "web", "wenku", "wiki", "work", "www", "zh", "zh-cn", "zh-tw", "zip"];
 	const 随机数 = Math.floor(Math.random() * 3 + 1);
-	const 随机路径 = [...常用路径目录].sort(() => 0.5 - Math.random()).slice(0, 随机数).join('/');
+	const 随机路径 = 常用路径目录.sort(() => 0.5 - Math.random()).slice(0, 随机数).join('/');
 	if (完整节点路径 === "/") return `/${随机路径}`;
 	else return `/${随机路径 + 完整节点路径.replace('/?', '?')}`;
 }
@@ -6224,148 +6208,6 @@ async function 请求优选API(urls, 默认端口 = '443', uid = "000000", 超�
 	// 将LINK内容转换为数组并去重
 	const LINK数组 = 订阅链接响应的明文LINK内容.trim() ? [...new Set(订阅链接响应的明文LINK内容.split(/\r?\n/).filter(line => line.trim() !== ''))] : [];
 	return [Array.from(results), LINK数组, 需要订阅转换订阅URLs, Array.from(反代IP池)];
-}
-
-// 只读取代理 PATH 所需的 KV 配置，避免每个代理请求都调用完整配置加载流程（其中包含 CF 用量查询）。
-async function 读取代理PATH白名单配置(env) {
-	let 配置 = {};
-	try {
-		if (env.KV && typeof env.KV.get === 'function') {
-			const configText = await env.KV.get('config.json');
-			if (configText) 配置 = JSON.parse(configText);
-		}
-	} catch (error) {
-		console.error(`读取 PATH 白名单配置失败: ${error.message}`);
-	}
-
-	const _p = 特征码字典[0], 占位符 = '{{IP:PORT}}';
-	let 配置路径 = env.PATH
-		? (String(env.PATH).startsWith('/') ? String(env.PATH) : '/' + String(env.PATH))
-		: (typeof 配置.PATH === 'string' && 配置.PATH ? 配置.PATH : '/');
-	if (!配置路径.startsWith('/')) 配置路径 = '/' + 配置路径;
-
-	const 反代配置 = 配置.反代 && typeof 配置.反代 === 'object' ? 配置.反代 : {};
-	const 默认路径模板 = {
-		[_p]: 'proxyip=' + 占位符,
-		SOCKS5: { 全局: 'socks5://' + 占位符, 标准: 'socks5=' + 占位符 },
-		HTTP: { 全局: 'http://' + 占位符, 标准: 'http=' + 占位符 },
-		HTTPS: { 全局: 'https://' + 占位符, 标准: 'https=' + 占位符 },
-		TURN: { 全局: 'turn://' + 占位符, 标准: 'turn=' + 占位符 },
-		SSTP: { 全局: 'sstp://' + 占位符, 标准: 'sstp=' + 占位符 }
-	};
-	const 已保存路径模板 = 反代配置.路径模板 && typeof 反代配置.路径模板 === 'object' ? 反代配置.路径模板 : {};
-	const 路径模板 = { ...默认路径模板, ...已保存路径模板 };
-	for (const 类型 of ['SOCKS5', 'HTTP', 'HTTPS', 'TURN', 'SSTP']) {
-		路径模板[类型] = { ...默认路径模板[类型], ...(已保存路径模板[类型] || {}) };
-	}
-
-	const SOCKS5配置 = 反代配置.SOCKS5 && typeof 反代配置.SOCKS5 === 'object' ? 反代配置.SOCKS5 : {};
-	const 代理类型 = String(SOCKS5配置.启用 || '').toUpperCase();
-	const 代理模板 = 路径模板[代理类型];
-	let 路径反代参数 = '';
-	if (代理模板 && SOCKS5配置.账号) {
-		const 代理路径模板 = SOCKS5配置.全局 ? 代理模板.全局 : 代理模板.标准;
-		if (typeof 代理路径模板 === 'string') 路径反代参数 = 代理路径模板.replace(占位符, SOCKS5配置.账号);
-	} else if ((反代配置[_p] ?? 'auto') !== 'auto') {
-		路径反代参数 = String(路径模板[_p]).replace(占位符, 反代配置[_p]);
-	}
-
-	let 反代查询参数 = '';
-	if (路径反代参数.includes('?')) {
-		const [反代路径部分, 反代查询部分] = 路径反代参数.split('?');
-		路径反代参数 = 反代路径部分;
-		反代查询参数 = 反代查询部分;
-	}
-
-	配置路径 = 配置路径.replace(路径反代参数, '').replace('//', '/');
-	const [原始路径部分, ...原始查询数组] = 配置路径.split('?');
-	const 路径部分 = 原始路径部分 === '/' ? '' : 原始路径部分.replace(new RegExp('/+$'), '');
-	const 查询部分 = 原始查询数组.length ? '?' + 原始查询数组.join('?') : '';
-	const 最终查询部分 = 反代查询参数 ? (查询部分 ? 查询部分 + '&' + 反代查询参数 : '?' + 反代查询参数) : 查询部分;
-	const 完整节点路径 = (路径部分 || '/') + (路径部分 && 路径反代参数 ? '/' : '') + 路径反代参数 + 最终查询部分 + (配置.启用0RTT ? (最终查询部分 ? '&' : '?') + 'ed=2560' : '');
-
-	return {
-		路径: 规范化代理PATH路径(完整节点路径),
-		随机路径: !!配置.随机路径
-	};
-}
-
-function 规范化代理PATH路径(路径) {
-	try {
-		const pathname = new URL(String(路径 || '/'), 'https://path.invalid').pathname;
-		return decodeURIComponent(pathname) || '/';
-	} catch (error) {
-		return null;
-	}
-}
-
-function 获取代理PATH候选路径(请求路径, 启用随机路径) {
-	const 候选路径 = [请求路径];
-	if (!启用随机路径 || !请求路径 || !请求路径.startsWith('/')) return 候选路径;
-
-	const 路径片段 = 请求路径.slice(1).split('/');
-	for (let 前缀数量 = 1; 前缀数量 <= 3 && 前缀数量 <= 路径片段.length; 前缀数量++) {
-		if (!路径片段.slice(0, 前缀数量).every(片段 => 随机路径目录集合.has(片段))) break;
-		const 剩余片段 = 路径片段.slice(前缀数量);
-		候选路径.push(剩余片段.length ? '/' + 剩余片段.join('/') : '/');
-	}
-	return 候选路径;
-}
-
-function 是否为动态ProxyIP路径(请求路径, 基础路径) {
-	const 基础前缀 = 基础路径 === '/' ? '' : 基础路径.replace(new RegExp('/+$'), '');
-	const 剩余路径 = 请求路径.slice(基础前缀.length);
-	return 请求路径.startsWith(基础前缀 + '/') && new RegExp('^/(?:proxyip[.=]|pyip=|ip=)[^/]+$', 'i').test(剩余路径);
-}
-
-// Xray XHTTP stream-one 默认把 UUID 会话 ID 放在 PATH 后面。
-// 仅允许一个标准 UUID 段，避免把任意子路径也当作合法 XHTTP 入口。
-function 是否为XHTTP会话路径(请求路径, 基础路径) {
-	const 基础前缀 = 基础路径 === '/' ? '/' : 基础路径.replace(new RegExp('/+$'), '') + '/';
-	if (!请求路径.startsWith(基础前缀)) return false;
-	const 会话ID = 请求路径.slice(基础前缀.length);
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(会话ID);
-}
-
-function 校验代理PATH白名单(url, PATH配置, 传输类型, 反代上下文 = {}) {
-	const 请求路径 = 规范化代理PATH路径(url.pathname);
-	const 允许路径 = PATH配置?.路径;
-	if (!请求路径 || !允许路径) return false;
-
-	// sing-box gRPC 会在 service_name 后追加 /Tun；Xray 对以 / 开头的 serviceName 还支持绝对路径。
-	const 请求路径候选 = 传输类型 === 'grpc' && 请求路径.startsWith('//')
-		? [请求路径, 请求路径.slice(1)]
-		: [请求路径];
-	const 候选路径 = [...new Set(请求路径候选.flatMap(路径 => 获取代理PATH候选路径(路径, PATH配置.随机路径)))];
-
-	if (传输类型 === 'grpc') {
-		const 去除末尾斜杠 = 允许路径 === '/' ? '' : 允许路径.replace(new RegExp('/+$'), '');
-		const grpc路径白名单 = new Set([允许路径, '/' + 允许路径]);
-		for (const 方法名 of ['Tun', 'TunMulti']) {
-			if (允许路径 === '/') {
-				grpc路径白名单.add('/' + 方法名);
-				grpc路径白名单.add('//' + 方法名);
-				grpc路径白名单.add('///' + 方法名);
-			} else {
-				grpc路径白名单.add(去除末尾斜杠 + '/' + 方法名);
-				grpc路径白名单.add('/' + 去除末尾斜杠 + '/' + 方法名);
-			}
-		}
-		for (const 候选 of 候选路径) {
-			if (grpc路径白名单.has(候选)) return true;
-			const 不含GRPC方法的路径 = 候选.replace(new RegExp('/(?:Tun|TunMulti)$'), '');
-			if (是否为动态ProxyIP路径(不含GRPC方法的路径, 允许路径)) return true;
-			if (反代上下文.反代IP === '链式代理' && new RegExp('^/video/[^/]+$', 'i').test(不含GRPC方法的路径)) return true;
-		}
-	} else {
-		for (const 候选 of 候选路径) {
-			if (候选 === 允许路径 ||
-				是否为动态ProxyIP路径(候选, 允许路径) ||
-				(传输类型 === 'http' && 是否为XHTTP会话路径(候选, 允许路径))) return true;
-			if (反代上下文.反代IP === '链式代理' && new RegExp('^/video/[^/]+$', 'i').test(候选)) return true;
-		}
-	}
-	return false;
 }
 
 async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代兜底 = true) {
