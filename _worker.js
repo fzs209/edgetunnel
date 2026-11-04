@@ -156,7 +156,8 @@ export default {
 						};
 
 						const Cloudflare目标 = { hostname: '172.68.87.12', port: 443 };
-						const 普通公网目标 = { hostname: 'www.google.com', port: 443 };
+						const 普通公网域名目标 = { hostname: 'www.google.com', port: 443 };
+						const 普通公网IP目标 = { hostname: '8.8.8.8', port: 443 };
 						const 测试结果 = [];
 
 						测试结果.push(await 测试连接(
@@ -171,13 +172,23 @@ export default {
 						));
 						测试结果.push(await 测试连接(
 							'cloudflare:sockets.connect',
-							普通公网目标,
-							() => cloudflareSocketConnect(普通公网目标)
+							普通公网域名目标,
+							() => cloudflareSocketConnect(普通公网域名目标)
 						));
 						测试结果.push(await 测试连接(
 							'request.fetcher.connect',
-							普通公网目标,
-							() => 创建请求TCP连接器(request)(普通公网目标)
+							普通公网域名目标,
+							() => 创建请求TCP连接器(request)(普通公网域名目标)
+						));
+						测试结果.push(await 测试连接(
+							'cloudflare:sockets.connect',
+							普通公网IP目标,
+							() => cloudflareSocketConnect(普通公网IP目标)
+						));
+						测试结果.push(await 测试连接(
+							'request.fetcher.connect',
+							普通公网IP目标,
+							() => 创建请求TCP连接器(request)(普通公网IP目标)
 						));
 
 						return new Response(JSON.stringify({
