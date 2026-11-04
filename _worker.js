@@ -5758,7 +5758,8 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 	if (!config_JSON.XHTTP.xmux || typeof config_JSON.XHTTP.xmux !== 'object') config_JSON.XHTTP.xmux = {};
 	if (config_JSON.XHTTP.xmux.maxConcurrency === undefined || config_JSON.XHTTP.xmux.maxConcurrency === null) config_JSON.XHTTP.xmux.maxConcurrency = "";
 	if (config_JSON.XHTTP.xmux.maxConnections === undefined || config_JSON.XHTTP.xmux.maxConnections === null) config_JSON.XHTTP.xmux.maxConnections = "";
-	config_JSON.HOST = host;
+	// 保留面板保存的 HOST；仅部署环境变量 HOST 显式设置时覆盖，首次初始化则回退到当前域名。
+	if (env.HOST || !config_JSON.HOST) config_JSON.HOST = host;
 	if (!config_JSON.HOSTS) config_JSON.HOSTS = [hostname];
 	if (env.HOST) config_JSON.HOSTS = (await 整理成数组(env.HOST)).map(h => h.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0]);
 	config_JSON.UUID = userID;
@@ -5830,9 +5831,11 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 	const ALPNLINK参数 = config_JSON.ALPN ? `&alpn=${encodeURIComponent(config_JSON.ALPN)}` : '';
 	const { type: 传输协议, 路径字段名, 域名字段名 } = 获取传输协议配置(config_JSON);
 	const 传输路径参数值 = 获取传输路径参数值(config_JSON, config_JSON.完整节点路径);
+	// 节点链接使用详细配置中保存的 HOST，而不是生成请求的访问域名。
+	const 节点HOST = config_JSON.HOST || host;
 	config_JSON.LINK = config_JSON.协议类型 === 'ss'
-		? `${config_JSON.协议类型}://${btoa(config_JSON.SS.加密方式 + ':' + userID)}@${host}:${config_JSON.SS.TLS ? '443' : '80'}?plugin=v2${encodeURIComponent(`ray-plugin;mode=websocket;host=${host};path=${((config_JSON.完整节点路径.includes('?') ? config_JSON.完整节点路径.replace('?', '?enc=' + config_JSON.SS.加密方式 + '&') : (config_JSON.完整节点路径 + '?enc=' + config_JSON.SS.加密方式)) + (config_JSON.SS.TLS ? ';tls' : ''))};mux=0`) + ECHLINK参数}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`
-		: `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=${host}&fp=${config_JSON.Fingerprint}&sni=${host}&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none${ALPNLINK参数}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
+		? `${config_JSON.协议类型}://${btoa(config_JSON.SS.加密方式 + ':' + userID)}@${节点HOST}:${config_JSON.SS.TLS ? '443' : '80'}?plugin=v2${encodeURIComponent(`ray-plugin;mode=websocket;host=${节点HOST};path=${((config_JSON.完整节点路径.includes('?') ? config_JSON.完整节点路径.replace('?', '?enc=' + config_JSON.SS.加密方式 + '&') : (config_JSON.完整节点路径 + '?enc=' + config_JSON.SS.加密方式)) + (config_JSON.SS.TLS ? ';tls' : ''))};mux=0`) + ECHLINK参数}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`
+		: `${config_JSON.协议类型}://${userID}@${节点HOST}:443?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=${节点HOST}&fp=${config_JSON.Fingerprint}&sni=${节点HOST}&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none${ALPNLINK参数}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
 	config_JSON.优选订阅生成.TOKEN = await MD5MD5(hostname + userID);
 
 	const 初始化TG_JSON = { BotToken: null, ChatID: null };
