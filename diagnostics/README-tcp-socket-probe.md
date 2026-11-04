@@ -18,7 +18,7 @@ It does not perform a TLS handshake or send application data.
 From the repository root, on branch `diagnostics/tcp-connect-comparison`:
 
 ```powershell
-npx wrangler deploy --config diagnostics/wrangler.tcp-socket-probe.toml
+npx wrangler deploy --config wrangler.tcp-probe.toml
 ```
 
 Wrangler will create a separate Worker named `edgetunnel-tcp-socket-probe`
