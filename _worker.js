@@ -4802,38 +4802,14 @@ function 获取传输协议配置(配置 = {}) {
 		"xPaddingKey": 本机标识键
 	};
 
-	if (配置.传输协议 === 'xhttp') {
-		// Xray XMUX 参数支持整数和范围字符串，例如 16-32。
-		const 解析XMUX限制 = (value) => {
-			if (typeof value !== 'string' && typeof value !== 'number') return null;
-			const text = String(value).trim();
-			if (!text) return null;
-			const match = /^(\d+)(?:-(\d+))?$/.exec(text);
-			if (!match || (match[2] !== undefined && Number(match[2]) < Number(match[1]))) return null;
-			return match[2] === undefined ? Number(match[1]) : text;
-		};
-		const maxConcurrency = 解析XMUX限制(配置.XHTTP?.xmux?.maxConcurrency);
-		const maxConnections = 解析XMUX限制(配置.XHTTP?.xmux?.maxConnections);
-
-		if (maxConcurrency !== null || maxConnections !== null) {
-			叉混淆JSON.xmux = {};
-
-			if (maxConcurrency !== null) {
-				叉混淆JSON.xmux.maxConcurrency = maxConcurrency;
-			}
-
-			if (maxConnections !== null) {
-				叉混淆JSON.xmux.maxConnections = maxConnections;
-			}
-		}
-	}
-
+	// XMUX 统一从「连接复用.xmux」读取；关闭开关时不向节点链接写入 XMUX 参数。
 	if (配置.传输协议 === 'xhttp' && 配置.连接复用?.启用 === true) {
 		const 连接复用XMUX = 配置.连接复用.xmux;
 		if (连接复用XMUX && typeof 连接复用XMUX === 'object' && !Array.isArray(连接复用XMUX)) {
-			叉混淆JSON.xmux = { ...(叉混淆JSON.xmux || {}), ...连接复用XMUX };
+			叉混淆JSON.xmux = { ...连接复用XMUX };
 		}
 	}
+
 	return {
 		type: 是gRPC ? (配置.gRPC模式 === 'multi' ? 'grpc&mode=multi' : 'grpc&mode=gun') : (配置.传输协议 === 'xhttp' ? `xhttp&mode=stream-one&extra=${encodeURIComponent(JSON.stringify(叉混淆JSON))}` : 'ws'),
 		路径字段名: 是gRPC ? 'serviceName' : 'path',
@@ -5631,7 +5607,7 @@ async function DoH查询(域名, 记录类型, DoH解析服务 = "https://cloudf
 async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重置配置 = false) {
 	const _p = 特征码字典[0];
 	const xmux默认值 = {
-		maxConnections: 4,
+		maxConnections: 1,
 		maxConcurrency: 0,
 		cMaxReuseTimes: 0,
 		hMaxRequestTimes: 0,
@@ -5649,12 +5625,6 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		传输协议: "xhttp",
 		gRPC模式: "gun",
 		gRPCUserAgent: UA,
-		XHTTP: {
-			xmux: {
-				maxConcurrency: "",
-				maxConnections: "1",
-			},
-		},
 		跳过证书验证: false,
 		启用0RTT: false,
 		TLS分片: null,
@@ -5763,7 +5733,7 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		config_JSON = 默认配置JSON;
 	}
 
-	// 兼容旧版 KV 配置，补齐上游新增的连接复用设置。
+	// 统一 XMUX 配置入口，并将旧版 XHTTP.xmux 自动迁移到「连接复用.xmux」。
 	if (!config_JSON.连接复用 || typeof config_JSON.连接复用 !== 'object' || Array.isArray(config_JSON.连接复用)) {
 		config_JSON.连接复用 = {};
 	}
@@ -5771,7 +5741,22 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 	if (!config_JSON.连接复用.xmux || typeof config_JSON.连接复用.xmux !== 'object' || Array.isArray(config_JSON.连接复用.xmux)) {
 		config_JSON.连接复用.xmux = {};
 	}
-	config_JSON.连接复用.xmux = { ...xmux默认值, ...config_JSON.连接复用.xmux };
+	const 连接复用XMUX = { ...xmux默认值, ...config_JSON.连接复用.xmux };
+	const 旧版XMUX = config_JSON.XHTTP?.xmux;
+	if (旧版XMUX && typeof 旧版XMUX === 'object' && !Array.isArray(旧版XMUX)) {
+		for (const 字段 of ['maxConnections', 'maxConcurrency']) {
+			const 旧值 = 旧版XMUX[字段];
+			const 新值 = 连接复用XMUX[字段];
+			const 旧值有效 = 旧值 !== undefined && 旧值 !== null && String(旧值).trim() !== '';
+			const 新值未设置 = 新值 === undefined || 新值 === null || String(新值).trim() === '';
+			// 兼容此前同步上游时写入的 maxConnections=4 默认值；若仍为默认值，优先保留旧设置。
+			const 新值仍为默认值 = String(新值) === String(xmux默认值[字段]) || (字段 === 'maxConnections' && String(新值) === '4');
+			if (旧值有效 && (新值未设置 || 新值仍为默认值)) 连接复用XMUX[字段] = 旧值;
+		}
+		delete config_JSON.XHTTP.xmux;
+		if (Object.keys(config_JSON.XHTTP).length === 0) delete config_JSON.XHTTP;
+	}
+	config_JSON.连接复用.xmux = 连接复用XMUX;
 
 	if (!config_JSON.订阅转换配置.SUBLIST) config_JSON.订阅转换配置.SUBLIST = false;
 	if (!config_JSON.订阅转换配置.UDP) config_JSON.订阅转换配置.UDP = false;
