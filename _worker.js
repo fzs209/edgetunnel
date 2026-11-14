@@ -5738,6 +5738,7 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		config_JSON.连接复用 = {};
 	}
 	if (typeof config_JSON.连接复用.启用 !== 'boolean') config_JSON.连接复用.启用 = false;
+	let XMUX配置已迁移 = false;
 	const 原始连接复用XMUX = config_JSON.连接复用.xmux;
 	const 原始连接复用XMUX有效 = 原始连接复用XMUX && typeof 原始连接复用XMUX === 'object' && !Array.isArray(原始连接复用XMUX) && Object.keys(原始连接复用XMUX).length > 0;
 	const 上游旧版XMUX默认值 = { maxConnections: 4, maxConcurrency: 0, cMaxReuseTimes: 0, hMaxRequestTimes: 0, hMaxReusableSecs: 3600, hKeepAlivePeriod: 0 };
@@ -5746,6 +5747,7 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		&& Object.keys(上游旧版XMUX默认值).every(字段 => Object.prototype.hasOwnProperty.call(原始连接复用XMUX, 字段) && String(原始连接复用XMUX[字段]) === String(上游旧版XMUX默认值[字段]));
 	const 连接复用XMUX = { ...xmux默认值, ...(原始连接复用XMUX有效 ? 原始连接复用XMUX : {}) };
 	if (config_JSON.XHTTP && typeof config_JSON.XHTTP === 'object' && !Array.isArray(config_JSON.XHTTP) && Object.prototype.hasOwnProperty.call(config_JSON.XHTTP, 'xmux')) {
+		XMUX配置已迁移 = true;
 		const 旧版XMUX = config_JSON.XHTTP.xmux;
 		if (旧版XMUX && typeof 旧版XMUX === 'object' && !Array.isArray(旧版XMUX)) {
 			for (const 字段 of ['maxConnections', 'maxConcurrency']) {
@@ -5760,6 +5762,14 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		if (Object.keys(config_JSON.XHTTP).length === 0) delete config_JSON.XHTTP;
 	}
 	config_JSON.连接复用.xmux = 连接复用XMUX;
+	if (XMUX配置已迁移) {
+		try {
+			// 将旧版字段迁移结果写回 KV，避免每个请求都重复迁移。
+			await env.KV.put('config.json', JSON.stringify(config_JSON, null, 2));
+		} catch (error) {
+			console.error(`持久化 XMUX 配置迁移失败: ${error.message}`);
+		}
+	}
 
 	if (!config_JSON.订阅转换配置.SUBLIST) config_JSON.订阅转换配置.SUBLIST = false;
 	if (!config_JSON.订阅转换配置.UDP) config_JSON.订阅转换配置.UDP = false;
