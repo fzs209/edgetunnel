@@ -1,7 +1,7 @@
 const Version = '2026-11-10 23:26:46';
 let config_JSON, 缓存SOCKS5白名单 = null, 调试日志打印 = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
-const Pages静态页面 = 'https://fzs209.github.io/EDT-Pages.github.io', EDT_版本号 = Number(String(Version).replace(/\D+/g, ''));
+const Pages静态页面 = 'https://edt-pages.github.io', EDT_版本号 = Number(String(Version).replace(/\D+/g, ''));
 ///////////////////////////////////////////////////////全局常量和工具函数///////////////////////////////////////////////
 const WS早期数据最大字节 = 8 * 1024, WS早期数据最大头长度 = Math.ceil(WS早期数据最大字节 * 4 / 3) + 4;
 const 上行合包目标字节 = 20 * 1024, 上行队列最大字节 = 16 * 1024 * 1024, 上行队列最大条目 = 4096;
@@ -4801,15 +4801,7 @@ function 获取传输协议配置(配置 = {}) {
 		"xPaddingHeader": 本机标识头,
 		"xPaddingKey": 本机标识键
 	};
-
-	// XMUX 统一从「连接复用.xmux」读取；关闭开关时不向节点链接写入 XMUX 参数。
-	if (配置.传输协议 === 'xhttp' && 配置.连接复用?.启用 === true) {
-		const 连接复用XMUX = 配置.连接复用.xmux;
-		if (连接复用XMUX && typeof 连接复用XMUX === 'object' && !Array.isArray(连接复用XMUX)) {
-			叉混淆JSON.xmux = { ...连接复用XMUX };
-		}
-	}
-
+	if (配置.连接复用.启用 === true) 叉混淆JSON.xmux = 配置.连接复用.xmux;
 	return {
 		type: 是gRPC ? (配置.gRPC模式 === 'multi' ? 'grpc&mode=multi' : 'grpc&mode=gun') : (配置.传输协议 === 'xhttp' ? `xhttp&mode=stream-one&extra=${encodeURIComponent(JSON.stringify(叉混淆JSON))}` : 'ws'),
 		路径字段名: 是gRPC ? 'serviceName' : 'path',
@@ -5611,9 +5603,9 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		maxConcurrency: 0,
 		cMaxReuseTimes: 0,
 		hMaxRequestTimes: 0,
-		hMaxReusableSecs: 3600,
+		hMaxReusableSecs: 0,
 		hKeepAlivePeriod: 0
-	};
+	}
 	const host = hostname, Ali_DoH = "https://dns.alidns.com/dns-query", ECH_SNI = "cloudflare-ech.com", 占位符 = '{{IP:PORT}}', 初始化开始时间 = performance.now(), 默认配置JSON = {
 		TIME: new Date().toISOString(),
 		HOST: host,
@@ -5635,8 +5627,8 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 			SNI: "research.cloudflare.com",
 		},
 		连接复用: {
-			启用: false,
-			xmux: { ...xmux默认值 },
+			启用: true,
+			xmux: xmux默认值
 		},
 		SS: {
 			加密方式: "aes-128-gcm",
@@ -5733,44 +5725,7 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		config_JSON = 默认配置JSON;
 	}
 
-	// 统一 XMUX 配置入口，并将旧版 XHTTP.xmux 自动迁移到「连接复用.xmux」。
-	if (!config_JSON.连接复用 || typeof config_JSON.连接复用 !== 'object' || Array.isArray(config_JSON.连接复用)) {
-		config_JSON.连接复用 = {};
-	}
-	if (typeof config_JSON.连接复用.启用 !== 'boolean') config_JSON.连接复用.启用 = false;
-	let XMUX配置已迁移 = false;
-	const 原始连接复用XMUX = config_JSON.连接复用.xmux;
-	const 原始连接复用XMUX有效 = 原始连接复用XMUX && typeof 原始连接复用XMUX === 'object' && !Array.isArray(原始连接复用XMUX) && Object.keys(原始连接复用XMUX).length > 0;
-	const 上游旧版XMUX默认值 = { maxConnections: 4, maxConcurrency: 0, cMaxReuseTimes: 0, hMaxRequestTimes: 0, hMaxReusableSecs: 3600, hKeepAlivePeriod: 0 };
-	const 原始配置为上游自动默认值 = 原始连接复用XMUX有效
-		&& Object.keys(原始连接复用XMUX).length === Object.keys(上游旧版XMUX默认值).length
-		&& Object.keys(上游旧版XMUX默认值).every(字段 => Object.prototype.hasOwnProperty.call(原始连接复用XMUX, 字段) && String(原始连接复用XMUX[字段]) === String(上游旧版XMUX默认值[字段]));
-	const 连接复用XMUX = { ...xmux默认值, ...(原始连接复用XMUX有效 ? 原始连接复用XMUX : {}) };
-	if (config_JSON.XHTTP && typeof config_JSON.XHTTP === 'object' && !Array.isArray(config_JSON.XHTTP) && Object.prototype.hasOwnProperty.call(config_JSON.XHTTP, 'xmux')) {
-		XMUX配置已迁移 = true;
-		const 旧版XMUX = config_JSON.XHTTP.xmux;
-		if (旧版XMUX && typeof 旧版XMUX === 'object' && !Array.isArray(旧版XMUX)) {
-			for (const 字段 of ['maxConnections', 'maxConcurrency']) {
-				const 旧值 = 旧版XMUX[字段];
-				const 旧值有效 = 旧值 !== undefined && 旧值 !== null && String(旧值).trim() !== '';
-				const 新值已明确设置 = 原始连接复用XMUX有效 && Object.prototype.hasOwnProperty.call(原始连接复用XMUX, 字段) && 原始连接复用XMUX[字段] !== undefined && 原始连接复用XMUX[字段] !== null && String(原始连接复用XMUX[字段]).trim() !== '';
-				// 已有自定义新值优先；旧版自动注入的整套默认值不视为用户修改。
-				if (旧值有效 && (!新值已明确设置 || 原始配置为上游自动默认值)) 连接复用XMUX[字段] = 旧值;
-			}
-		}
-		delete config_JSON.XHTTP.xmux;
-		if (Object.keys(config_JSON.XHTTP).length === 0) delete config_JSON.XHTTP;
-	}
-	config_JSON.连接复用.xmux = 连接复用XMUX;
-	if (XMUX配置已迁移) {
-		try {
-			// 将旧版字段迁移结果写回 KV，避免每个请求都重复迁移。
-			await env.KV.put('config.json', JSON.stringify(config_JSON, null, 2));
-		} catch (error) {
-			console.error(`持久化 XMUX 配置迁移失败: ${error.message}`);
-		}
-	}
-
+	if (!config_JSON.连接复用) config_JSON.连接复用 = { 启用: false, xmux: xmux默认值 };
 	if (!config_JSON.订阅转换配置.SUBLIST) config_JSON.订阅转换配置.SUBLIST = false;
 	if (!config_JSON.订阅转换配置.UDP) config_JSON.订阅转换配置.UDP = false;
 	if (!config_JSON.订阅转换配置.XUDP) config_JSON.订阅转换配置.XUDP = false;
@@ -5848,12 +5803,11 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 	if (!config_JSON.ECH) config_JSON.ECH = false;
 	if (!config_JSON.ECHConfig) config_JSON.ECHConfig = { DNS: Ali_DoH, SNI: ECH_SNI };
 	const ECHLINK参数 = config_JSON.ECH ? `&ech=${encodeURIComponent((config_JSON.ECHConfig.SNI ? config_JSON.ECHConfig.SNI + '+' : '') + config_JSON.ECHConfig.DNS)}` : '';
-	const ALPNLINK参数 = config_JSON.ALPN ? `&alpn=${encodeURIComponent(config_JSON.ALPN)}` : '';
 	const { type: 传输协议, 路径字段名, 域名字段名 } = 获取传输协议配置(config_JSON);
 	const 传输路径参数值 = 获取传输路径参数值(config_JSON, config_JSON.完整节点路径);
 	config_JSON.LINK = config_JSON.协议类型 === 'ss'
 		? `${config_JSON.协议类型}://${btoa(config_JSON.SS.加密方式 + ':' + userID)}@${host}:${config_JSON.SS.TLS ? '443' : '80'}?plugin=v2${encodeURIComponent(`ray-plugin;mode=websocket;host=${host};path=${((config_JSON.完整节点路径.includes('?') ? config_JSON.完整节点路径.replace('?', '?enc=' + config_JSON.SS.加密方式 + '&') : (config_JSON.完整节点路径 + '?enc=' + config_JSON.SS.加密方式)) + (config_JSON.SS.TLS ? ';tls' : ''))};mux=0`) + ECHLINK参数}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`
-		: `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=${host}&fp=${config_JSON.Fingerprint}&sni=${host}&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none${ALPNLINK参数}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
+		: `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${传输协议 + ECHLINK参数}&${域名字段名}=${host}&fp=${config_JSON.Fingerprint}&sni=${host}&${路径字段名}=${encodeURIComponent(传输路径参数值) + TLS分片参数}&encryption=none#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
 	config_JSON.优选订阅生成.TOKEN = await MD5MD5(hostname + userID);
 
 	const 初始化TG_JSON = { BotToken: null, ChatID: null };
