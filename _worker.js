@@ -5738,20 +5738,23 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 		config_JSON.连接复用 = {};
 	}
 	if (typeof config_JSON.连接复用.启用 !== 'boolean') config_JSON.连接复用.启用 = false;
-	if (!config_JSON.连接复用.xmux || typeof config_JSON.连接复用.xmux !== 'object' || Array.isArray(config_JSON.连接复用.xmux)) {
-		config_JSON.连接复用.xmux = {};
-	}
-	const 连接复用XMUX = { ...xmux默认值, ...config_JSON.连接复用.xmux };
-	const 旧版XMUX = config_JSON.XHTTP?.xmux;
-	if (旧版XMUX && typeof 旧版XMUX === 'object' && !Array.isArray(旧版XMUX)) {
-		for (const 字段 of ['maxConnections', 'maxConcurrency']) {
-			const 旧值 = 旧版XMUX[字段];
-			const 新值 = 连接复用XMUX[字段];
-			const 旧值有效 = 旧值 !== undefined && 旧值 !== null && String(旧值).trim() !== '';
-			const 新值未设置 = 新值 === undefined || 新值 === null || String(新值).trim() === '';
-			// 兼容此前同步上游时写入的 maxConnections=4 默认值；若仍为默认值，优先保留旧设置。
-			const 新值仍为默认值 = String(新值) === String(xmux默认值[字段]) || (字段 === 'maxConnections' && String(新值) === '4');
-			if (旧值有效 && (新值未设置 || 新值仍为默认值)) 连接复用XMUX[字段] = 旧值;
+	const 原始连接复用XMUX = config_JSON.连接复用.xmux;
+	const 原始连接复用XMUX有效 = 原始连接复用XMUX && typeof 原始连接复用XMUX === 'object' && !Array.isArray(原始连接复用XMUX) && Object.keys(原始连接复用XMUX).length > 0;
+	const 上游旧版XMUX默认值 = { maxConnections: 4, maxConcurrency: 0, cMaxReuseTimes: 0, hMaxRequestTimes: 0, hMaxReusableSecs: 3600, hKeepAlivePeriod: 0 };
+	const 原始配置为上游自动默认值 = 原始连接复用XMUX有效
+		&& Object.keys(原始连接复用XMUX).length === Object.keys(上游旧版XMUX默认值).length
+		&& Object.keys(上游旧版XMUX默认值).every(字段 => Object.prototype.hasOwnProperty.call(原始连接复用XMUX, 字段) && String(原始连接复用XMUX[字段]) === String(上游旧版XMUX默认值[字段]));
+	const 连接复用XMUX = { ...xmux默认值, ...(原始连接复用XMUX有效 ? 原始连接复用XMUX : {}) };
+	if (config_JSON.XHTTP && typeof config_JSON.XHTTP === 'object' && !Array.isArray(config_JSON.XHTTP) && Object.prototype.hasOwnProperty.call(config_JSON.XHTTP, 'xmux')) {
+		const 旧版XMUX = config_JSON.XHTTP.xmux;
+		if (旧版XMUX && typeof 旧版XMUX === 'object' && !Array.isArray(旧版XMUX)) {
+			for (const 字段 of ['maxConnections', 'maxConcurrency']) {
+				const 旧值 = 旧版XMUX[字段];
+				const 旧值有效 = 旧值 !== undefined && 旧值 !== null && String(旧值).trim() !== '';
+				const 新值已明确设置 = 原始连接复用XMUX有效 && Object.prototype.hasOwnProperty.call(原始连接复用XMUX, 字段) && 原始连接复用XMUX[字段] !== undefined && 原始连接复用XMUX[字段] !== null && String(原始连接复用XMUX[字段]).trim() !== '';
+				// 已有自定义新值优先；旧版自动注入的整套默认值不视为用户修改。
+				if (旧值有效 && (!新值已明确设置 || 原始配置为上游自动默认值)) 连接复用XMUX[字段] = 旧值;
+			}
 		}
 		delete config_JSON.XHTTP.xmux;
 		if (Object.keys(config_JSON.XHTTP).length === 0) delete config_JSON.XHTTP;
@@ -5766,11 +5769,6 @@ async function 读取config_JSON(env, hostname, userID, UA = "Mozilla/5.0", 重�
 	if (!config_JSON.订阅转换配置.SORT) config_JSON.订阅转换配置.SORT = false;
 	if (typeof config_JSON.订阅转换配置.EXPAND !== 'boolean') config_JSON.订阅转换配置.EXPAND = true;
 	if (!config_JSON.gRPCUserAgent) config_JSON.gRPCUserAgent = UA;
-	// 为已有 KV 配置补齐 XHTTP XMUX 字段，兼容升级前创建的配置。
-	if (!config_JSON.XHTTP || typeof config_JSON.XHTTP !== 'object') config_JSON.XHTTP = {};
-	if (!config_JSON.XHTTP.xmux || typeof config_JSON.XHTTP.xmux !== 'object') config_JSON.XHTTP.xmux = {};
-	if (config_JSON.XHTTP.xmux.maxConcurrency === undefined || config_JSON.XHTTP.xmux.maxConcurrency === null) config_JSON.XHTTP.xmux.maxConcurrency = "";
-	if (config_JSON.XHTTP.xmux.maxConnections === undefined || config_JSON.XHTTP.xmux.maxConnections === null) config_JSON.XHTTP.xmux.maxConnections = "";
 	config_JSON.HOST = host;
 	if (!config_JSON.HOSTS) config_JSON.HOSTS = [hostname];
 	if (env.HOST) config_JSON.HOSTS = (await 整理成数组(env.HOST)).map(h => h.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0]);
